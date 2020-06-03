@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+	  	<title>Buscaminas</title>
+	  	<link rel = "stylesheet" href = "style.css"/>
+	  	<script src="https://unpkg.com/react@16/umd/react.development.js"></script>
+	  	<script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
+	  	<script src="https://unpkg.com/babel-standalone@6.15.0/babel.min.js"></script>
+	</head>
+	<body>
+		<script type="text/babel">
+			var tamCasilla = 55;  //Medida de la casilla para ancho y alto
+			var juego = true;  //Indica si el juego esta activo o no (activa y desactiva las casillas)
+			var totalCasillas = 81; //numero de casillas ocultas del tablero
+			var banderas = 0;  //banderas que se pocisionan en cada mina
+			var bandAl = 1;
+
+			class LightningCounter extends React.Component {
+                constructor(props, context) {
+                    super(props, context);
+                    this.state = {
+                        strikes: 1,
+                        seg: 0,
+                        min: 0,
+                        hrs: 0
+                    };
+                    this.timerTick = this.timerTick.bind(this);
+                }
+                timerTick() {
+                    if(this.state.hrs == 99 && this.state.min == 59 && this.state.seg == 59 && juego ) {
+                        alert('Tiempo Agotado')
+                        juego = false;
+                    }
+                    else if(juego){
+                        this.setState({
+                            strikes: this.state.strikes + 1,
+                            seg: parseInt((this.state.strikes)%60),
+                            min: parseInt(((this.state.strikes-(this.state.seg+1)%60)/60)%60),
+                            hrs: parseInt((this.state.strikes-(this.state.seg+1)%3600)/3600)
+                        });
+                    }
+
+                }
+                componentDidMount() {
+                    setInterval(this.timerTick, 1000);
+                }
+                render() {
+                    return (
+                        <h1>
+                            {this.state.hrs < 10 ? "0": ""}{this.state.hrs}:
+                            {this.state.min < 10 ? "0": ""}{this.state.min}:
+                            {this.state.seg < 10 ? "0": ""}{this.state.seg}
+							&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+							{banderas}/10
+                        </h1>
+                    );
+                }
+            }
+			class Casilla extends React.Component {
+				constructor(props) {
+					super(props);
+					this.state = {
+						indice: this.props.indice,
+						valor: this.props.valor,
+						img: null,
+						estatus: this.props.estatus
+					};
+				}
+				static getDerivedStateFromProps (nextProps, prevState) {
+				    if(prevState.estatus !== nextProps.estatus || prevState.valor !== nextProps.valor) {
+				      	return {
+							valor: prevState.valor,
+				      		estatus: prevState.estatus,
+				      		img: prevState.valor
+				      	};
+				    }
+				    return null;
+  				}
+  				shouldComponentUpdate(nextProps, nextState) {
+				    if(nextProps.estatus !== this.props.estatus && this.props.valor !== nextProps.valor || nextProps.estatus !== this.props.estatus || nextProps.valor !== this.props.valor && nextProps.valor == "!") {
+				     	this.setState({
+							valor: nextProps.valor,
+							estatus: nextProps.estatus,
+							img: nextProps.valor
+						});
+				       return true;
+				    }
+				    if(nextProps.valor !== this.props.valor && this.state.valor == "!"){
+				    	this.setState({
+							valor: nextProps.valor,
+							estatus: nextProps.estatus,
+							img: null
+						});
+				       return true;
+				    }
+				    if(nextProps.estatus === this.props.estatus || this.props.valor === nextProps.valor) {
+				       	return true;
+				    }
+					return false;
+			 	}
+				render() {
+					var casilla_style = {
+						backgroundColor: this.state.estatus == false ? "seagreen" : (this.state.img == '*' ? "gray" : "silver"),
+						border: "1px solid black",
+						float: "left",
+						height: tamCasilla,
+						paddingTop: this.state.img == '*' ? "4px" : "0px",
+						textAlign: "center",
+						width: tamCasilla,
+						fontSize: this.state.img == '*' ? "44px" : "24px",
+  						fontWeight: "bold",
+						color: "darkred",
+						borderRadius: "5px"
+					};
+					return (
+						<button
+							style = {casilla_style}
+							className = "Casilla"
+							disabled = {this.state.estatus}
+							onMouseDown = {() => this.props.onMouseDown()}
+							/*onClick = {() => this.props.onClick()}*/>
+							{this.state.img}
+						</button>
+					);
+				}
+			}
+			class Tablero extends React.Component {
+				constructor(props) {
+					super(props);
+					this.state = {
+						valores: [
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null)],
+						casillas: [
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null),
+							Array(9).fill(null)],
+						deshabilitadas: [
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false),
+							Array(9).fill(false)
+						]
+					};
+				}
+
+				tableroAleatorio(a, b) {
+					var minas = 0;
+					while(minas < 10) {
+						var i = Math.floor(Math.random() * 9);
+						var j = Math.floor(Math.random() * 9);
+						if(this.state.casillas[i][j] == '*'|| i>=(a-1)&&i<=(a+1)&&j>=(b-1)&&j<=(b+1)) continue;
+						this.state.casillas[i][j] = '*';
+						this.state.valores[i][j] = '*';
+						minas++;
+ 					}
+
+					for(var i = 0; i < 9; i++) {
+						for(var j = 0; j < 9; j++) {
+							if(this.state.casillas[i][j] == '*') {
+								this.colocarAdyacencias(i-1, j);
+								this.colocarAdyacencias(i-1, j+1);
+								this.colocarAdyacencias(i, j+1);
+								this.colocarAdyacencias(i+1, j+1);
+								this.colocarAdyacencias(i+1, j);
+								this.colocarAdyacencias(i+1, j-1);
+								this.colocarAdyacencias(i, j-1);
+								this.colocarAdyacencias(i-1, j-1);
+							}
+						}
+					}
+				}
+				colocarAdyacencias(i, j) {
+					if(i >= 0 && i <= 8 && j >= 0 && j <= 8) {
+						if(this.state.casillas[i][j] == null) {
+							this.state.casillas[i][j] = '1';
+							this.state.valores[i][j] = '1';
+						}
+						else if(this.state.casillas[i][j] != '*') {
+							this.state.casillas[i][j] = parseInt(this.state.casillas[i][j]) + 1;
+							this.state.valores[i][j] = parseInt(this.state.valores[i][j]) + 1;
+						}
+					}
+				}
+				clickCasilla(i, j) {
+					if(bandAl == 1){
+						bandAl = 0;
+						this.tableroAleatorio(i, j);
+						this.clickCasilla(i, j);
+					}
+					else if(juego && i >= 0 && i <= 8 && j >= 0 && j <= 8 && !this.state.deshabilitadas[i][j]) {
+						totalCasillas = totalCasillas-1;
+						var des = this.state.deshabilitadas.slice();
+						des[i][j] = true;
+						if(this.state.casillas[i][j] == '*') {
+							for(var a = 0; a < 9; a++) {
+								for(var b = 0; b < 9; b++) {
+									if(this.state.casillas[a][b] == '*') des[a][b] = true;
+								}
+							}
+							juego = false;
+							totalCasillas--;
+							alert('Game Over');
+						}
+						else if(totalCasillas == 10 || banderas == 10) {
+								alert('WIN');
+								juego = false;
+						}
+						this.setState({
+							deshabilitadas: des
+						});
+						if(this.state.casillas[i][j] == null){
+							this.clickCasilla(i-1, j);
+							this.clickCasilla(i-1, j+1);
+							this.clickCasilla(i, j+1);
+							this.clickCasilla(i+1, j+1);
+							this.clickCasilla(i+1, j);
+							this.clickCasilla(i+1, j-1);
+							this.clickCasilla(i, j-1);
+							this.clickCasilla(i-1, j-1);
+						}
+
+					}
+				}
+				detectarBoton(event, i, j){
+					if(event.button==2){
+						console.log(this.state.casillas);
+						console.log(this.state.valores);
+						if(this.state.casillas[i][j] == "!"){
+							var cas = this.state.casillas.slice();
+							cas[i][j] = this.state.valores[i][j];
+							this.setState({
+								casillas: cas
+							});
+							banderas--;
+						}
+						else{
+							var cas = this.state.casillas.slice();
+							cas[i][j] = "!";
+							banderas++;
+							this.setState({
+								casillas: cas
+							});
+							
+						}
+					}
+					else if(event.button==0){
+						if(this.state.casillas[i][j] != "!"){
+							this.clickCasilla(i, j);
+						}
+					}
+				}
+				renderCasilla(i, j) {
+					return (
+						<Casilla
+							valor = {this.state.casillas[i][j]}
+							indice = {(i*9)+j}
+							estatus = {this.state.deshabilitadas[i][j]}
+							onMouseDown = {() => this.detectarBoton(event, i, j)}
+							/*onClick = {() => this.clickCasilla(i, j)}*//>
+					);
+				}
+				render() {
+					var display_style = {
+                        width: (tamCasilla*9),
+                        height: tamCasilla,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center",
+                        fontSize: "16px",
+                        backgroundColor: "black",
+                        paddingTop: 0,
+                        fontFamily: "sans-serif",
+                        color: "seagreen",
+                        borderRadius: 10
+                    };
+					var style_fila = {
+					  	clear: "both",
+					  	content: "",
+					  	display: "table",
+						backgroundColor: "black"
+					};
+					var style_columna = {
+						WebkitFilter: "drop-shadow(0px 0px 5px #000)",
+						filter: "drop-shadow(0px 0px 5px #000)"
+					}
+					var filas = [];
+					for(var i = 0; i < 9; i++) {
+						var columna = [];
+						for(var j = 0; j < 9; j++) {
+							columna.push(this.renderCasilla(i, j));
+						}
+						filas.push(<div style = {style_fila}>{columna}</div>);
+					}
+					return (
+						<div style = {style_columna}>
+							<div style = {display_style}>
+								<LightningCounter/>
+							</div>
+							<div> {filas} </div>
+						</div>
+					);
+				}
+			}
+
+			class Game extends React.Component{
+				render(){
+					var gameStyle = {
+						position: "absolute",
+						width: "100%",
+						height: "100%",
+						display: "flex",
+						margin: "0px",
+						justifyContent: "center",
+						alignItems: "center",
+						backgroundColor: "darkred"
+					}
+
+					return(
+						<div style = {gameStyle}>
+							<Tablero/>
+						</div>
+					);
+				}
+			}
+			ReactDOM.render (
+				<div>
+					<Game/>
+				</div>,
+				document.body
+			);
+		</script>
+	</body>
+</html>
